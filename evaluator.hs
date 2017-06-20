@@ -7,43 +7,59 @@ import Parser (Tree(..))
 
 type SymTab = M.Map String Double
 
-evaluate :: Tree -> SymTab -> (Double, SymTab)
+evaluate :: Tree -> SymTab -> Either String (Double, SymTab)
 evaluate (SumNode op left right) symTab =
-    let (lft, symTab') = evaluate left symTab
-        (rgt, symTab'') = evaluate right symTab
-    in case op of 
-        Plus -> (lft + rgt, symTab'')
-        Minus -> (lft - rgt, symTab'')
+    case evaluate left symTab of 
+        Left msg -> Left msg
+        Right (lft, symTab') -> 
+            case evaluate right symTab' of 
+                Left msg -> Left msg
+                Right (rgt, symTab'') ->
+                    case op of 
+                        Plus -> Right (lft + rgt, symTab'')
+                        Minus -> Right (lft - rgt, symTab'')
 
 evaluate (ProdNode op left right) symTab =
-    let (lft, symTab') = evaluate left symTab
-        (rgt, symTab'') = evaluate right symTab
-    in case op of 
-        Times -> (lft + rgt, symTab'')
-        Div -> (lft - rgt, symTab'')
+    case evaluate left symTab of 
+        Left msg -> Left msg
+        Right (lft, symTab') -> 
+            case evaluate right symTab' of 
+                Left msg -> Left msg
+                Right (rgt, symTab'') ->
+                    case op of 
+                        Times -> Right (lft * rgt, symTab'') 
+                        Div -> Right (lft / rgt, symTab'')
 
 evaluate (UnaryNode op tree) symTab =
-    let (x, symTab') = evaluate tree symTab
-    in case op of
-        Plus -> (x, symTab')
-        Minus -> (-x, symTab')
+    case evaluate tree symTab of 
+        Left msg -> Left msg
+        Right (x, symTab') -> 
+            case op of 
+                Plus -> Right (x, symTab')
+                Minus -> Right (-x, symTab')
 
-evaluate (NumNode x) symTab = (x, symTab)
+evaluate (NumNode x) symTab = Right (x, symTab)
 
-evaluate (VarNode str) symTab = lookUp str symTab
+evaluate (VarNode str) symTab = 
+    case lookUp str symTab of
+        Left msg -> Left msg
+        Right (v, symTab') -> Right (v, symTab')
 
 evaluate (AssignNode str tree) symTab =
-    let (v, symTab') = evaluate tree symTab
-        (_, symTab'') = addSymbol str v symTab'
-    in (v, symTab'')
-
-lookUp :: String -> SymTab -> (Double, SymTab)
+    case evaluate tree symTab of 
+        Left msg -> Left msg
+        Right (v, symTab') -> 
+            case addSymbol str v symTab' of
+            Left msg -> Left msg
+            Right (_, symTab'') -> Right (v, symTab'')
+                
+lookUp :: String -> SymTab -> Either String (Double, SymTab)
 lookUp str symTab =
     case M.lookup str symTab of 
-        Just v -> (v, symTab)
-        Nothing -> error $ "Undefined variable " ++ str
+        Just v -> Right (v, symTab)
+        Nothing -> Left $ "Undefined variable " ++ str
 
-addSymbol :: String -> Double -> SymTab -> ((), SymTab)
+addSymbol :: String -> Double -> SymTab -> Either String ((), SymTab)
 addSymbol str val symTab = 
     let symTab' = M.insert str val symTab
-    in ((), symTab')
+    in Right ((), symTab')
